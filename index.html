@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Paper Pal, your pocket paperwork desk</title>
+<meta name="description" content="Sign PDFs, turn photos into PDFs, convert documents, and scan text. Everything runs in your browser.">
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header id="app-header">
+    <div class="brand" id="brand" title="Paper Pal">
+      <span class="brand-mark">&#128196;</span>
+      <div>
+        <h1>Paper Pal</h1>
+        <p class="tagline">your pocket paperwork desk</p>
+      </div>
+    </div>
+    <p class="privacy-note">&#128274; Everything happens in your browser. Your documents never leave your device.</p>
+  </header>
+
+  <nav id="tabs" aria-label="Tools">
+    <button class="tab-btn active" data-tab="signatures">&#9997;&#65039; Signatures</button>
+    <button class="tab-btn" data-tab="signpdf">&#128395;&#65039; Sign PDF</button>
+    <button class="tab-btn" data-tab="photospdf">&#128247; Photos to PDF</button>
+    <button class="tab-btn" data-tab="pdfword">PDF to Word</button>
+    <button class="tab-btn" data-tab="wordpdf">Word to PDF</button>
+    <button class="tab-btn" data-tab="ocr">&#128269; Scan to Text</button>
+  </nav>
+
+  <main>
+    <!-- 1. SIGNATURES -->
+    <section id="tab-signatures" class="tab-panel active">
+      <h2>My signatures</h2>
+      <p class="lede">Draw it with your finger or type it fancy. Save as many as you like, then stamp them onto PDFs in the next tab.</p>
+
+      <div class="card">
+        <h3>Draw a signature</h3>
+        <canvas id="sigCanvas" width="600" height="220" aria-label="Signature drawing pad"></canvas>
+        <div class="btn-row">
+          <button class="btn ghost" id="sigUndo">Undo stroke</button>
+          <button class="btn ghost" id="sigClear">Clear</button>
+        </div>
+        <div class="field-row">
+          <input type="text" id="sigLabel" maxlength="40" placeholder="Label, e.g. Formal, Quick scribble">
+          <button class="btn primary" id="sigSaveDraw">Save signature</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Or type it</h3>
+        <div class="field-row">
+          <input type="text" id="sigTypeName" maxlength="40" placeholder="Your name">
+        </div>
+        <div class="font-pick" role="radiogroup" aria-label="Script style">
+          <button class="font-opt selected" data-font="0" style="font-family:'Brush Script MT','Segoe Script','Apple Chancery',cursive">Elegant</button>
+          <button class="font-opt" data-font="1" style="font-family:'Snell Roundhand','Lucida Handwriting','Apple Chancery',cursive">Flourish</button>
+          <button class="font-opt" data-font="2" style="font-family:'Segoe Script','Bradley Hand',cursive">Casual</button>
+        </div>
+        <canvas id="sigTypeCanvas" width="600" height="180" aria-label="Typed signature preview"></canvas>
+        <div class="field-row">
+          <input type="text" id="sigTypeLabel" maxlength="40" placeholder="Label, e.g. Typed formal">
+          <button class="btn primary" id="sigSaveType">Save signature</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Saved signatures <span class="count" id="sigCount"></span></h3>
+        <div id="sigEmpty" class="empty-state">
+          <div class="empty-art">&#128395;&#65039;</div>
+          <p>No signatures yet. Scribble one above, your future self says thanks.</p>
+        </div>
+        <div id="sigList" class="sig-list"></div>
+      </div>
+    </section>
+
+    <!-- 2. SIGN PDF -->
+    <section id="tab-signpdf" class="tab-panel">
+      <h2>Sign a PDF</h2>
+      <p class="lede">Drop a PDF, tap where the signature goes, download the signed file. No printing, no scanning, no drama.</p>
+
+      <div class="card">
+        <label class="file-drop" id="signPdfDrop">
+          <input type="file" id="signPdfFile" accept="application/pdf,.pdf" hidden>
+          <span class="file-drop-title">&#128196; Choose a PDF</span>
+          <span class="file-drop-sub" id="signPdfName">or drag one here</span>
+        </label>
+        <div id="signPdfError" class="error-box" hidden></div>
+      </div>
+
+      <div id="signPdfWork" hidden>
+        <div class="card">
+          <div class="field-row wrap">
+            <label>Signature
+              <select id="signPdfSig"></select>
+            </label>
+            <label>Size
+              <input type="range" id="signPdfSize" min="60" max="260" value="140">
+            </label>
+          </div>
+          <div class="field-row wrap">
+            <label>Apply to
+              <select id="signPdfMode">
+                <option value="single">This page only</option>
+                <option value="all">All pages</option>
+              </select>
+            </label>
+            <div class="page-nav">
+              <button class="btn ghost" id="signPdfPrev">&larr;</button>
+              <span id="signPdfPageLabel">Page 1 of 1</span>
+              <button class="btn ghost" id="signPdfNext">&rarr;</button>
+            </div>
+          </div>
+          <p class="hint">Tap on the page to place your signature. Tap again to add another.</p>
+          <div id="signPdfStage" class="pdf-stage">
+            <canvas id="signPdfCanvas"></canvas>
+            <div id="signPdfOverlays"></div>
+          </div>
+          <div class="btn-row">
+            <button class="btn ghost" id="signPdfUndoPlace">Undo last</button>
+            <button class="btn ghost" id="signPdfClearPlace">Clear all</button>
+            <button class="btn primary" id="signPdfDownload">Download signed PDF</button>
+          </div>
+          <div id="signPdfStatus" class="status-line" aria-live="polite"></div>
+        </div>
+      </div>
+      <div id="signPdfEmpty" class="empty-state">
+        <div class="empty-art">&#128196;</div>
+        <p>Pick a PDF above and this desk will set itself up.</p>
+      </div>
+    </section>
+
+    <!-- 3. PHOTOS TO PDF -->
+    <section id="tab-photospdf" class="tab-panel">
+      <h2>Photos to PDF</h2>
+      <p class="lede">A few photos in, one tidy PDF out. Great for receipts, whiteboards, and gallery walls.</p>
+
+      <div class="card">
+        <label class="file-drop">
+          <input type="file" id="photosInput" accept="image/*" multiple hidden>
+          <span class="file-drop-title">&#128247; Choose photos</span>
+          <span class="file-drop-sub">select as many as you like</span>
+        </label>
+        <div class="field-row wrap">
+          <label class="check"><input type="checkbox" id="photosCompress" checked> Smaller file (recommended for sharing)</label>
+        </div>
+      </div>
+
+      <div class="card" id="photosCard" hidden>
+        <h3>Order <span class="count" id="photosCount"></span></h3>
+        <p class="hint">Use the arrows to reorder. First photo becomes the first page.</p>
+        <div id="photosList" class="photos-list"></div>
+        <div class="btn-row">
+          <button class="btn ghost" id="photosClear">Remove all</button>
+          <button class="btn primary" id="photosDownload">Download PDF</button>
+        </div>
+        <div id="photosStatus" class="status-line" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <!-- 4. PDF TO WORD -->
+    <section id="tab-pdfword" class="tab-panel">
+      <h2>PDF to Word</h2>
+      <p class="lede">Pulls the text out of a PDF and hands you an editable .doc file.</p>
+      <p class="honest">&#9888;&#65039; Honest note: text only. The original layout, fonts, and images are not preserved.</p>
+
+      <div class="card">
+        <label class="file-drop">
+          <input type="file" id="pdfWordFile" accept="application/pdf,.pdf" hidden>
+          <span class="file-drop-title">&#128196; Choose a PDF</span>
+          <span class="file-drop-sub" id="pdfWordName">text will be extracted page by page</span>
+        </label>
+        <div class="btn-row">
+          <button class="btn primary" id="pdfWordGo" disabled>Extract and download .doc</button>
+        </div>
+        <div id="pdfWordStatus" class="status-line" aria-live="polite"></div>
+        <div id="pdfWordError" class="error-box" hidden></div>
+      </div>
+    </section>
+
+    <!-- 5. WORD TO PDF -->
+    <section id="tab-wordpdf" class="tab-panel">
+      <h2>Word to PDF</h2>
+      <p class="lede">Turns a .docx into a clean preview, then your device does the PDF part.</p>
+      <p class="honest">&#9888;&#65039; Honest note: this opens your system print dialog. Choose "Save as PDF" as the destination.</p>
+
+      <div class="card">
+        <label class="file-drop">
+          <input type="file" id="wordPdfFile" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
+          <span class="file-drop-title">&#128196; Choose a .docx file</span>
+          <span class="file-drop-sub" id="wordPdfName">old .doc files are not supported, sorry</span>
+        </label>
+        <div class="btn-row">
+          <button class="btn primary" id="wordPdfPrint" disabled>Print / Save as PDF</button>
+        </div>
+        <div id="wordPdfStatus" class="status-line" aria-live="polite"></div>
+        <div id="wordPdfError" class="error-box" hidden></div>
+      </div>
+
+      <div class="card" id="wordPdfPreviewCard" hidden>
+        <h3>Preview</h3>
+        <div id="wordPdfPreview" class="doc-preview"></div>
+      </div>
+    </section>
+
+    <!-- 6. OCR -->
+    <section id="tab-ocr" class="tab-panel">
+      <h2>Scan to Text</h2>
+      <p class="lede">Point it at a photo of printed text and get editable words back. English and Simplified Chinese included.</p>
+
+      <div class="card">
+        <label class="file-drop">
+          <input type="file" id="ocrFile" accept="image/*" hidden>
+          <span class="file-drop-title">&#128269; Choose a scan or photo</span>
+          <span class="file-drop-sub" id="ocrName">clear, straight-on photos work best</span>
+        </label>
+        <div class="field-row wrap">
+          <label class="check"><input type="checkbox" id="ocrEng" checked> English</label>
+          <label class="check"><input type="checkbox" id="ocrChi" checked> Chinese (Simplified)</label>
+        </div>
+        <div class="btn-row">
+          <button class="btn primary" id="ocrGo" disabled>Extract text</button>
+        </div>
+        <div class="progress" id="ocrProgressWrap" hidden>
+          <div class="progress-bar" id="ocrProgressBar"></div>
+        </div>
+        <div id="ocrStatus" class="status-line" aria-live="polite"></div>
+        <div id="ocrError" class="error-box" hidden></div>
+      </div>
+
+      <div class="card" id="ocrResultCard" hidden>
+        <h3>Extracted text</h3>
+        <textarea id="ocrText" rows="10" aria-label="Extracted text"></textarea>
+        <div class="btn-row">
+          <button class="btn ghost" id="ocrCopy">Copy</button>
+          <button class="btn primary" id="ocrDownload">Download .txt</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p><a href="https://github.com/SerenaWuuu/paper-pal">github.com/SerenaWuuu/paper-pal</a> &middot; MIT open source &middot; made for paperwork haters</p>
+    <p class="sib">More from the lab: <a href="https://github.com/SerenaWuuu/Paws--friend-lab">Paws Friend Lab</a>, <a href="https://github.com/SerenaWuuu/data-toybox">Data Toybox</a>, <a href="https://github.com/SerenaWuuu/star-gazer">Star Gazer</a>, <a href="https://github.com/SerenaWuuu/cloud-toolkit">Cloud Toolkit</a>, <a href="https://github.com/SerenaWuuu/cat-care-log">Cat Care Log</a></p>
+  </footer>
+</div>
+
+<div id="printSheet" aria-hidden="true">
+  <div id="printContent"></div>
+</div>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<div id="stamp" hidden>
+  <div class="stamp-inner">
+    <div class="stamp-text">CERTIFIED<br>PAPERWORK</div>
+    <div class="stamp-quip" id="stampQuip"></div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+<script src="js/signatures.js"></script>
+<script src="js/sign-pdf.js"></script>
+<script src="js/photos-pdf.js"></script>
+<script src="js/pdf-word.js"></script>
+<script src="js/word-pdf.js"></script>
+<script src="js/ocr.js"></script>
+</body>
+</html>
